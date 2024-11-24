@@ -5,6 +5,7 @@ on:
     paths:
       - '백준/Silver/**'
       - '백준/Gold/**'
+  workflow_dispatch:  # 이 라인을 추가하여 수동 실행이 가능하도록 설정합니다.
 
 jobs:
   sync-to-b:
