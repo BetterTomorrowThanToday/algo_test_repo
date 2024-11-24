@@ -84,6 +84,9 @@ jobs:
         run: |
           DIR_NAME=${{ steps.date.outputs.dir_name }}
           
+          # Ensure the target directory exists before copying files
+          mkdir -p b_repo/${DIR_NAME}  # Add this line to create the target directory
+          
           # Copy the files from temp_b_repo directly to the target folder in b_repo
           cp -r temp_b_repo/${DIR_NAME}/* b_repo/${DIR_NAME}/
           
