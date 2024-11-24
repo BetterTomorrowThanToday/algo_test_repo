@@ -78,13 +78,16 @@ jobs:
             git pull origin main
           fi
 
-      # Step 6: Copy prepared files to B repo
+      # Step 6: Copy prepared files to B repository
       - name: Copy prepared files to B repository
         run: |
           DIR_NAME=${{ steps.date.outputs.dir_name }}
           
           # Copy the files from temp_b_repo directly to the target folder in b_repo
           cp -r temp_b_repo/${DIR_NAME}/* b_repo/${DIR_NAME}/
+          
+          # Clean up temp directory
+          rm -rf temp_b_repo
 
       # Step 7: Commit and push to B repository with A repo's last commit message
       - name: Commit and push to B repository with A repo's commit messages
