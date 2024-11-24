@@ -79,6 +79,23 @@ jobs:
             git pull origin main
           fi
 
+#      # Step 5: Clone B repo and handle empty repo case
+#      - name: Clone B repository
+#        run: |
+#          git clone https://${{ secrets.TOKEN }}@github.com/WeGoEver/HeeChan_Algo.git b_repo
+#          cd b_repo
+#
+#          # Check if the repository is empty (no commits)
+#          if [ -z "$(git log --oneline)" ]; then
+#            echo "B repository is empty, creating an initial commit"
+#            # Initialize the repository with an initial commit if it's empty
+#            git commit --allow-empty -m "Initial commit"
+#            git push origin main
+#          else
+#            git pull origin main
+#          fi
+
+
       # Step 6: Copy prepared files to B repository
       - name: Copy prepared files to B repository
         run: |
@@ -93,12 +110,30 @@ jobs:
           # Clean up temp directory
           rm -rf temp_b_repo
 
+#      # Step 7: Commit and push to B repository with A repo's last commit message
+#      - name: Commit and push to B repository with A repo's commit messages
+#        run: |
+#          cd b_repo
+#          git add .
+#          LAST_COMMIT_MSG=${{ env.LAST_COMMIT_MSG }}
+#
+#          # Commit with the last commit message from A repo
+#          git commit -m "Sync Silver and Gold updates from A repository: ${LAST_COMMIT_MSG}"
+#          git push origin main
       # Step 7: Commit and push to B repository with A repo's last commit message
       - name: Commit and push to B repository with A repo's commit messages
         run: |
           cd b_repo
+          
+          # Print the LAST_COMMIT_MSG for debugging
+          echo "Last commit message: $LAST_COMMIT_MSG"
+          
           git add .
-          LAST_COMMIT_MSG=${{ env.LAST_COMMIT_MSG }}
+          # Ensure LAST_COMMIT_MSG is not empty or undefined
+          if [ -z "$LAST_COMMIT_MSG" ]; then
+            echo "LAST_COMMIT_MSG is empty, using default message"
+            LAST_COMMIT_MSG="Sync changes from A repository"
+          fi
           
           # Commit with the last commit message from A repo
           git commit -m "Sync Silver and Gold updates from A repository: ${LAST_COMMIT_MSG}"
