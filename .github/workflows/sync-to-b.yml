@@ -1,48 +1,95 @@
-name: Sync Silver Folder
+name: Sync Silver and Gold to Repo B
 
 on:
   push:
     paths:
-      - '**/silver/**' # silver가 포함된 경로의 변화 감지
-      - '**/silver/**/**'
+      - '백준/Silver/**'
+      - '백준/Gold/**'
 
 jobs:
-  sync-silver:
+  sync-to-b:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. A 레포지토리 클론
-      - name: Checkout A Repository
+      # Step 1: Checkout A repository
+      - name: Checkout A repository
         uses: actions/checkout@v3
-        with:
-          repository: ${{ github.repository }}
-          path: A_repo
 
-      # 2. B 레포지토리 클론
-      - name: Checkout B Repository
-        uses: actions/checkout@v3
-        with:
-          repository: WeGoEver/HeeChan_Algo
-          token: ${{ secrets.TOKEN }} # B 레포지토리에 대한 토큰 필요
-          path: B_repo
-
-      # 3. silver 폴더 복사
-      - name: Copy Silver Folder to B Repo
+      # Step 2: Set up Git
+      - name: Set up Git
         run: |
-          mkdir -p B_repo/silver
-          cp -r A_repo/**/silver B_repo/ || true
+          git config --global user.name "Hiki's GitHub Actions Bot"
+          git config --global user.email "wsx0239@gmail.com"
 
-      # 4. B 레포지토리에 커밋 및 푸시
-
-      - name: Commit and Push to B Repository
+      # Step 3: Calculate current year, month, and week
+      - name: Determine current year, month, and week of the month
+        id: date
         run: |
-          cd B_repo
-          git config user.name "hiki"
-          git config user.email "wsx0239@gmail.com"
+          # Get current date (UTC by default)
+          TODAY=$(date +"%Y-%m-%d")
+
+          # Extract year, month, and day
+          YEAR=$(date -d "$TODAY" +"%Y")
+          MONTH=$(date -d "$TODAY" +"%m")
+          DAY=$(date -d "$TODAY" +"%d")
+
+          # Calculate start of the week (Sunday)
+          START_OF_WEEK=$(date -d "$TODAY -$(date -d "$TODAY" +%u - 1) days" +"%Y-%m-%d")
+          START_OF_WEEK_DAY=$(date -d "$START_OF_WEEK" +"%d")
+
+          # Calculate week number based on Sunday start
+          WEEK_NUMBER=$(((DAY - START_OF_WEEK_DAY) / 7 + 1))
+
+          # Adjust week number for weekend (if we are past Saturday)
+          if [ "$DAY" -gt "$START_OF_WEEK_DAY" ]; then
+            WEEK_NUMBER=$((WEEK_NUMBER + 1))
+          fi
+
+          # Create directory name (e.g., 2024-10/Week1)
+          DIR_NAME="${YEAR}-${MONTH}/Week${WEEK_NUMBER}"
+
+          # Set output for further steps
+          echo "DIR_NAME=${DIR_NAME}"
+          echo "::set-output name=dir_name::${DIR_NAME}"
+
+      # Step 4: Prepare files for B repository
+      - name: Prepare files for B repository
+        run: |
+          DIR_NAME=${{ steps.date.outputs.dir_name }}
+          mkdir -p temp_b_repo/${DIR_NAME}
           
-          # 날짜 포맷 (예: 2024-11-23)
-          COMMIT_DATE=$(date +'%Y-%m-%d')
+          # Copy Silver and Gold directories (문제 번호.문제 이름) into the appropriate folder
+          for level in Silver Gold; do
+            if [ -d 백준/$level ]; then
+              for problem_dir in 백준/$level/*/; do
+                problem_name=$(basename "$problem_dir") # {문제 번호}.{문제 이름}
           
+                # Create the corresponding directory in B repo if not exists
+                mkdir -p temp_b_repo/${DIR_NAME}/$problem_name
+          
+                # Copy all Java files for the problem to B repository
+                cp -r $problem_dir/* temp_b_repo/${DIR_NAME}/$problem_name/
+              done
+            fi
+          done
+
+      # Step 5: Clone B repo
+      - name: Clone B repository
+        run: |
+          git clone https://${{ secrets.TOKEN }}@github.com/WeGoEver/HeeChan_Algo.git b_repo
+          cd b_repo
+          git pull origin main
+
+      # Step 6: Copy prepared files to B repo
+      - name: Copy prepared files to B repository
+        run: |
+          DIR_NAME=${{ steps.date.outputs.dir_name }}
+          cp -r temp_b_repo/${DIR_NAME}/* b_repo/${DIR_NAME}/
+
+      # Step 7: Commit and push changes to B repository
+      - name: Commit and push to B repository
+        run: |
+          cd b_repo
           git add .
-          git commit -m "Sync folder from my repo on $COMMIT_DATE"
-          git push
+          git commit -m "Sync Silver and Gold updates from A repository (${DIR_NAME})"
+          git push origin main
