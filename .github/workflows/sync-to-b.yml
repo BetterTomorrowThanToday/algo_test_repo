@@ -25,31 +25,17 @@ jobs:
       - name: Determine current year, month, and week of the month
         id: date
         run: |
-          # Get current date (UTC by default)
           TODAY=$(date +"%Y-%m-%d")
-
-          # Extract year, month, and day
           YEAR=$(date -d "$TODAY" +"%Y")
           MONTH=$(date -d "$TODAY" +"%m")
           DAY=$(date -d "$TODAY" +"%d")
-
-          # Calculate start of the week (Sunday)
           START_OF_WEEK=$(date -d "$TODAY -$(date -d "$TODAY" +%u - 1) days" +"%Y-%m-%d")
           START_OF_WEEK_DAY=$(date -d "$START_OF_WEEK" +"%d")
-
-          # Calculate week number based on Sunday start
           WEEK_NUMBER=$(((DAY - START_OF_WEEK_DAY) / 7 + 1))
-
-          # Adjust week number for weekend (if we are past Saturday)
           if [ "$DAY" -gt "$START_OF_WEEK_DAY" ]; then
             WEEK_NUMBER=$((WEEK_NUMBER + 1))
           fi
-
-          # Create directory name (e.g., 2024-10/Week1)
           DIR_NAME="${YEAR}-${MONTH}/Week${WEEK_NUMBER}"
-
-          # Set output for further steps
-          echo "DIR_NAME=${DIR_NAME}"
           echo "::set-output name=dir_name::${DIR_NAME}"
 
       # Step 4: Prepare files for B repository
@@ -62,34 +48,51 @@ jobs:
           for level in Silver Gold; do
             if [ -d 백준/$level ]; then
               for problem_dir in 백준/$level/*/; do
-                problem_name=$(basename "$problem_dir") # {문제 번호}.{문제 이름}
-          
-                # Create the corresponding directory in B repo if not exists
+                problem_name=$(basename "$problem_dir")
                 mkdir -p temp_b_repo/${DIR_NAME}/$problem_name
-          
-                # Copy all Java files for the problem to B repository
                 cp -r $problem_dir/* temp_b_repo/${DIR_NAME}/$problem_name/
+          
+                # Get the last commit message for the problem directory
+                LAST_COMMIT_MSG=$(git log -1 --pretty=format:"%s" -- "$problem_dir")
+                echo "Last commit message for $problem_name: $LAST_COMMIT_MSG"
+
+                # Store the commit message to be used later
+                echo "LAST_COMMIT_MSG=$LAST_COMMIT_MSG" >> $GITHUB_ENV
               done
             fi
           done
 
-      # Step 5: Clone B repo
+      # Step 5: Clone B repo and handle empty repo case
       - name: Clone B repository
         run: |
           git clone https://${{ secrets.TOKEN }}@github.com/WeGoEver/HeeChan_Algo.git b_repo
           cd b_repo
-          git pull origin main
+          
+          # Check if the repository is empty (no commits)
+          if [ -z "$(git log --oneline)" ]; then
+            echo "B repository is empty, creating an initial commit"
+            # Initialize the repository with an initial commit if it's empty
+            git commit --allow-empty -m "Initial commit"
+            git push origin main
+          else
+            git pull origin main
+          fi
 
       # Step 6: Copy prepared files to B repo
       - name: Copy prepared files to B repository
         run: |
           DIR_NAME=${{ steps.date.outputs.dir_name }}
+          
+          # Copy the files from temp_b_repo directly to the target folder in b_repo
           cp -r temp_b_repo/${DIR_NAME}/* b_repo/${DIR_NAME}/
 
-      # Step 7: Commit and push changes to B repository
-      - name: Commit and push to B repository
+      # Step 7: Commit and push to B repository with A repo's last commit message
+      - name: Commit and push to B repository with A repo's commit messages
         run: |
           cd b_repo
           git add .
-          git commit -m "Sync Silver and Gold updates from A repository (${DIR_NAME})"
+          LAST_COMMIT_MSG=${{ env.LAST_COMMIT_MSG }}
+          
+          # Commit with the last commit message from A repo
+          git commit -m "Sync Silver and Gold updates from A repository: ${LAST_COMMIT_MSG}"
           git push origin main
