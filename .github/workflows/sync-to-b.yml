@@ -5,105 +5,108 @@ on:
     paths:
       - '백준/Silver/**'
       - '백준/Gold/**'
-  workflow_dispatch:  # 수동 실행이 가능하도록 설정
+  workflow_dispatch:
 
 jobs:
   sync-to-b:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout A repository
       - name: Checkout A repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # 전체 커밋 히스토리를 가져오기 위해 필요
 
-      # Step 2: Set up Git
       - name: Set up Git
         run: |
           git config --global user.name "Hiki's GitHub Actions Bot"
           git config --global user.email "wsx0239@gmail.com"
 
-      # Step 3: Process and Sync Problems by Commit Date
       - name: Process and Sync Problems by Commit Date
         run: |
-          # A 레포지토리의 Silver와 Gold 폴더 내의 파일을 처리
+          # 처리된 문제들 추적을 위한 임시 파일
+          touch processed_problems.txt
+
+          # Silver와 Gold 폴더의 모든 문제 폴더 처리
           for PROBLEM_DIR in 백준/Silver/* 백준/Gold/*; do
             if [ -d "$PROBLEM_DIR" ]; then
-              PROBLEM_NAME=$(basename "$PROBLEM_DIR") # 폴더 이름 추출
-              # 파일의 커밋 날짜 추출
-              COMMIT_DATE=$(git log -1 --format='%ad' --date=short -- "$(find "$PROBLEM_DIR" -type f | head -n 1)")
-              echo "commit date : $COMMIT_DATE"
-              YEAR=$(echo $COMMIT_DATE | cut -d'-' -f1)   # 연도 추출
-              MONTH=$(echo $COMMIT_DATE | cut -d'-' -f2)  # 월 추출
-          
-              # 월의 첫 번째 날의 요일 계산 (1=월요일, 7=일요일)
-              FIRST_DAY_OF_MONTH="${YEAR}-${MONTH}-01"
-              echo "First day of month: $FIRST_DAY_OF_MONTH"  # 디버그 출력
-              FIRST_DAY_WEEKDAY=$(date -d "$FIRST_DAY_OF_MONTH" +"%u") # 1=Monday, 7=Sunday
-          
-              # 각 월 1일의 요일에 따른 1주차 또는 0주차 결정
-              if [ "$FIRST_DAY_WEEKDAY" -eq 7 ] || [ "$FIRST_DAY_WEEKDAY" -lt 4 ]; then
-                 BASE_WEEK=1 # 일요일, 월요일, 화요일, 수요일 -> 1주차 시작
-              else
-                BASE_WEEK=0 # 목요일, 금요일, 토요일 -> 0주차 시작
+              PROBLEM_NAME=$(basename "$PROBLEM_DIR")
+              echo "Processing: $PROBLEM_NAME"
+
+              # 해당 폴더의 커밋 날짜 가져오기
+              COMMIT_DATE=$(git log -1 --format='%ad' --date=short -- "$PROBLEM_DIR")
+              if [ -z "$COMMIT_DATE" ]; then
+                echo "No commit date found for $PROBLEM_DIR, skipping..."
+                continue
               fi
           
-              # 커밋된 날짜까지의 경과 일수 계산
-              DAYS_SINCE_FIRST=$(($(date -d "$COMMIT_DATE" +%s) - $(date -d "$FIRST_DAY_OF_MONTH" +%s)))
-
-              # 0주차를 고려한 주차 계산
-              WEEK_NUMBER=$(( (DAYS_SINCE_FIRST / 86400) / 7 + BASE_WEEK ))
-
+              echo "Commit date: $COMMIT_DATE"
+          
+              # 연도와 월 추출
+              YEAR=$(echo $COMMIT_DATE | cut -d'-' -f1)
+              MONTH=$(echo $COMMIT_DATE | cut -d'-' -f2)
+          
+              # 해당 월의 첫 날 요일 계산 (1=월요일, 7=일요일)
+              FIRST_DAY="${YEAR}-${MONTH}-01"
+              FIRST_DAY_WEEKDAY=$(date -d "$FIRST_DAY" +"%u")
+          
+              # 주차 계산
+              if [ "$FIRST_DAY_WEEKDAY" -eq 7 ] || [ "$FIRST_DAY_WEEKDAY" -lt 4 ]; then
+                BASE_WEEK=1
+              else
+                BASE_WEEK=0
+              fi
+          
+              # 해당 날짜의 주차 계산
+              DAY_OF_MONTH=$(date -d "$COMMIT_DATE" +%d)
+              ADJUSTED_DAY=$((DAY_OF_MONTH - 1))
+              WEEK_NUMBER=$(( (ADJUSTED_DAY + FIRST_DAY_WEEKDAY - 1) / 7 + BASE_WEEK ))
+          
               # B 레포지토리의 대상 경로 생성
               TARGET_DIR="temp_b_repo/${YEAR}-${MONTH}/Week${WEEK_NUMBER}/${PROBLEM_NAME}"
+              echo "Target directory: $TARGET_DIR"
           
-              echo "target : $TARGET_DIR"
-              echo "problem dir : $PROBLEM_DIR"
-          
-              # 디렉터리 생성
+              # 디렉토리 생성 및 파일 복사
               mkdir -p "$TARGET_DIR"
-          
-              # 파일을 해당 디렉토리에 복사
               cp -r "$PROBLEM_DIR"/* "$TARGET_DIR"/
           
-              # Get the last commit message for the problem directory
-              LAST_COMMIT_MSG=$(git log -1 --pretty=format:"%s" -- "$PROBLEM_DIR")
-              echo "Last commit message for $PROBLEM_NAME: $LAST_COMMIT_MSG"
+              # 처리된 문제 기록
+              echo "$PROBLEM_NAME" >> processed_problems.txt
             fi
           done
 
-      # Step 4: Clone B repo and handle empty repo case
       - name: Clone B repository
         run: |
           git clone https://${{ secrets.TOKEN }}@github.com/BetterTomorrowThanToday/test_repo2 b_repo
           cd b_repo
-          
-          # Check if the repository is empty (no commits)
-          if [ -z "$(git log --oneline 2>/dev/null)" ]; then
-            echo "B repository is empty, creating an initial commit"
-            # Initialize the repository with an initial commit if it's empty
-            git commit --allow-empty -m "Initial commit"
+          if [ ! -f README.md ]; then
+            echo "# Algorithm Study Archive" > README.md
+            git add README.md
+            git commit -m "Initial commit"
             git push origin main
+          fi
+          git pull origin main
+
+      - name: Sync files to B repository
+        run: |
+          if [ -d "temp_b_repo" ]; then
+            cp -r temp_b_repo/* b_repo/
+            cd b_repo
+            git add .
+          
+            if [ -n "$(git status --porcelain)" ]; then
+              echo "Changes detected, committing..."
+              git commit -m "Sync: Update problem solutions ($(date '+%Y-%m-%d'))"
+              git push origin main
+            else
+              echo "No changes to commit"
+            fi
           else
-            git pull origin main
+            echo "No files to sync"
           fi
 
-      # Step 5: Copy prepared files to B repository
-      - name: Copy prepared files to B repository
+      - name: Cleanup
+        if: always()
         run: |
-          # temp_b_repo의 모든 내용을 b_repo로 복사
-          cp -r temp_b_repo/* b_repo/ || true
-          
-          # Clean up temp directory
           rm -rf temp_b_repo
-
-      # Step 6: Commit and push to B repository
-      - name: Commit and push to B repository
-        run: |
-          cd b_repo
-          git add .
-          if [ -n "$(git status --porcelain)" ]; then
-            git commit -m "Sync: Problems from A repository"
-            git push origin main
-          else
-            echo "No changes to commit"
-          fi
+          rm -f processed_problems.txt
