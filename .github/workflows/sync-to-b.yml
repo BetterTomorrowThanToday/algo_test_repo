@@ -67,7 +67,7 @@ jobs:
               mkdir -p $TARGET_DIR
 
               # 파일을 해당 디렉토리에 복사
-              cp -r $PROBLEM_DIR/* $TARGET_DIR/
+              cp -r $PROBLEM_DIR/. $TARGET_DIR/
           
               # Get the last commit message for the problem directory
               LAST_COMMIT_MSG=$(git log -1 --pretty=format:"%s" -- "$problem_dir")
