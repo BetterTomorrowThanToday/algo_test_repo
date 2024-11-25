@@ -30,56 +30,50 @@ jobs:
           for PROBLEM_DIR in 백준/Silver/* 백준/Gold/*; do
             if [ -d "$PROBLEM_DIR" ]; then
               PROBLEM_NAME=$(basename "$PROBLEM_DIR") # 폴더 이름 추출
+              # 파일의 커밋 날짜 추출
+              COMMIT_DATE=$(git log -1 --format='%Y-%m-%d' -- "$PROBLEM_DIR")
+              YEAR=$(echo $COMMIT_DATE | cut -d'-' -f1)   # 연도 추출
+              MONTH=$(echo $COMMIT_DATE | cut -d'-' -f2)  # 월 추출
+              
+              # 월의 첫 번째 날의 요일 계산 (1=월요일, 7=일요일)
+              FIRST_DAY_OF_MONTH="${YEAR}-${MONTH}-01"
+              echo "First day of month: $FIRST_DAY_OF_MONTH"  # 디버그 출력
+              FIRST_DAY_WEEKDAY=$(date -d "$FIRST_DAY_OF_MONTH" +"%u") # 1=Monday, 7=Sunday
+              
+              # 각 월 1일의 요일에 따른 1주차 또는 0주차 결정
+              if [ "$FIRST_DAY_WEEKDAY" -eq 7 ] || [ "$FIRST_DAY_WEEKDAY" -lt 4 ]; then
+                 BASE_WEEK=1 # 일요일, 월요일, 화요일, 수요일 -> 1주차 시작
+              else
+                BASE_WEEK=0 # 목요일, 금요일, 토요일 -> 0주차 시작
+              fi
           
-              # 각 파일의 커밋 날짜 추출
-              for FILE in $PROBLEM_DIR/*; do
-                if [ -f "$FILE" ]; then
-                  # 파일의 커밋 날짜 추출
-                  COMMIT_DATE=$(git log -1 --format='%Y-%m-%d' -- "$FILE")
-                  YEAR=$(echo $COMMIT_DATE | cut -d'-' -f1)   # 연도 추출
-                  MONTH=$(echo $COMMIT_DATE | cut -d'-' -f2)  # 월 추출
+              # 커밋된 날짜까지의 경과 일수 계산
+              DAYS_SINCE_FIRST=$(($(date -d "$COMMIT_DATE" +%s) - $(date -d "$FIRST_DAY_OF_MONTH" +%s)))
 
-                  # 월의 첫 번째 날의 요일 계산 (1=월요일, 7=일요일)
-                  FIRST_DAY_OF_MONTH="${YEAR}-${MONTH}-01"
-                  echo "First day of month: $FIRST_DAY_OF_MONTH"  # 디버그 출력
-                  FIRST_DAY_WEEKDAY=$(date -d "$FIRST_DAY_OF_MONTH" +"%u") # 1=Monday, 7=Sunday
+              # 0주차를 고려한 주차 계산
+              WEEK_NUMBER=$(( (DAYS_SINCE_FIRST / 86400) / 7 + BASE_WEEK ))
 
-                  # 각 월 1일의 요일에 따른 1주차 또는 0주차 결정
-                  if [ "$FIRST_DAY_WEEKDAY" -eq 7 ] || [ "$FIRST_DAY_WEEKDAY" -lt 4 ]; then
-                    BASE_WEEK=1 # 일요일, 월요일, 화요일, 수요일 -> 1주차 시작
-                  else
-                    BASE_WEEK=0 # 목요일, 금요일, 토요일 -> 0주차 시작
-                  fi
+              # 주차 정보 출력
+              echo "year=$YEAR" >> $GITHUB_ENV
+              echo "month=$MONTH" >> $GITHUB_ENV
+              echo "week=Week $WEEK_NUMBER" >> $GITHUB_ENV
+              echo "dir_name=$YEAR/$MONTH/Week $WEEK_NUMBER" >> $GITHUB_ENV
 
-                  # 커밋된 날짜까지의 경과 일수 계산
-                  DAYS_SINCE_FIRST=$(($(date -d "$COMMIT_DATE" +%s) - $(date -d "$FIRST_DAY_OF_MONTH" +%s)))
-
-                  # 0주차를 고려한 주차 계산
-                  WEEK_NUMBER=$(( (DAYS_SINCE_FIRST / 86400) / 7 + BASE_WEEK ))
-
-                  # 주차 정보 출력
-                  echo "year=$YEAR" >> $GITHUB_ENV
-                  echo "month=$MONTH" >> $GITHUB_ENV
-                  echo "week=Week $WEEK_NUMBER" >> $GITHUB_ENV
-                  echo "dir_name=$YEAR/$MONTH/Week $WEEK_NUMBER" >> $GITHUB_ENV
-
-                  # B 레포지토리의 대상 경로 생성
-                  TARGET_DIR="temp_b_repo/${YEAR}-${MONTH}/Week${WEEK_NUMBER}/${PROBLEM_NAME}"
-
-                  # 디렉터리 생성
-                  mkdir -p $TARGET_DIR
-
-                  # 파일을 해당 디렉토리에 복사
-                  cp "$FILE" "$TARGET_DIR/"
+              # B 레포지토리의 대상 경로 생성
+              TARGET_DIR="temp_b_repo/${YEAR}-${MONTH}/Week${WEEK_NUMBER}/${PROBLEM_NAME}"
           
-                   # Get the last commit message for the problem directory
-                  LAST_COMMIT_MSG=$(git log -1 --pretty=format:"%s" -- "$problem_dir")
-                  echo "Last commit message for $problem_name: $LAST_COMMIT_MSG"
+              # 디렉터리 생성
+              mkdir -p $TARGET_DIR
 
-                  # Store the commit message to be used later
-                  echo "LAST_COMMIT_MSG=$LAST_COMMIT_MSG" >> $GITHUB_ENV
-                fi
-              done
+              # 파일을 해당 디렉토리에 복사
+              cp "$FILE" "$TARGET_DIR/"
+          
+              # Get the last commit message for the problem directory
+              LAST_COMMIT_MSG=$(git log -1 --pretty=format:"%s" -- "$problem_dir")
+              echo "Last commit message for $problem_name: $LAST_COMMIT_MSG"
+
+              # Store the commit message to be used later
+              echo "LAST_COMMIT_MSG=$LAST_COMMIT_MSG" >> $GITHUB_ENV
             fi
           done
 
