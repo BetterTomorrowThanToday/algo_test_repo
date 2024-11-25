@@ -107,6 +107,10 @@ jobs:
             cp -r temp_b_repo/* b_repo/
             cd b_repo
           
+            # Git 설정
+            git config --global core.quotepath false
+            git config --global core.precomposeunicode true
+          
             # 변경된 파일들 커밋
             git add .
           
