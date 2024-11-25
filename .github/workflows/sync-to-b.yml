@@ -32,6 +32,7 @@ jobs:
               PROBLEM_NAME=$(basename "$PROBLEM_DIR") # 폴더 이름 추출
               # 파일의 커밋 날짜 추출
               COMMIT_DATE=$(git log -1 --format='%Y-%m-%d' -- "$PROBLEM_DIR")
+              echo "commit date : $COMMIT_DATE"
               YEAR=$(echo $COMMIT_DATE | cut -d'-' -f1)   # 연도 추출
               MONTH=$(echo $COMMIT_DATE | cut -d'-' -f2)  # 월 추출
               
