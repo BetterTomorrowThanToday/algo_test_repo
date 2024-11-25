@@ -5,7 +5,7 @@ on:
     paths:
       - '백준/Silver/**'
       - '백준/Gold/**'
-  workflow_dispatch:  # 이 라인을 추가하여 수동 실행이 가능하도록 설정합니다.
+  workflow_dispatch:  # 수동 실행이 가능하도록 설정
 
 jobs:
   sync-to-b:
@@ -22,7 +22,7 @@ jobs:
           git config --global user.name "Hiki's GitHub Actions Bot"
           git config --global user.email "wsx0239@gmail.com"
 
-      # Step 3: Calculate current year, month, and week
+      # Step 3: Calculate current year, month, and week (기존 로직 수정)
       - name: Determine current year, month, and week of the month
         id: date
         run: |
@@ -30,13 +30,34 @@ jobs:
           YEAR=$(date -d "$TODAY" +"%Y")
           MONTH=$(date -d "$TODAY" +"%m")
           DAY=$(date -d "$TODAY" +"%d")
-          START_OF_WEEK=$(date -d "$TODAY -$(date -d "$TODAY" +%u - 1) days" +"%Y-%m-%d")
-          START_OF_WEEK_DAY=$(date -d "$START_OF_WEEK" +"%d")
-          WEEK_NUMBER=$(((DAY - START_OF_WEEK_DAY) / 7 + 1))
-          if [ "$DAY" -gt "$START_OF_WEEK_DAY" ]; then
-            WEEK_NUMBER=$((WEEK_NUMBER + 1))
+
+          # 현재 날짜의 주의 시작일 (일요일 기준)
+          START_OF_WEEK=$(date -d "$TODAY -$(date -d "$TODAY" +%u) days" +"%Y-%m-%d")
+          
+          # 현재 날짜의 주의 종료일 (토요일 기준)
+          END_OF_WEEK=$(date -d "$START_OF_WEEK +6 days" +"%Y-%m-%d")
+
+          # 현재 주간이 해당 월에 속하는지 과반수로 판단
+          START_MONTH=$(date -d "$START_OF_WEEK" +"%m")
+          END_MONTH=$(date -d "$END_OF_WEEK" +"%m")
+
+          # 현재 주간이 걸친 월별 일수 계산
+          DAYS_IN_START_MONTH=$(( ($(date -d "$END_OF_WEEK" +%s) - $(date -d "$START_OF_WEEK" +%s)) / 86400 + 1 ))
+          DAYS_IN_START_MONTH=$(( DAYS_IN_START_MONTH - $(date -d "$END_OF_WEEK" +"%d") + 1 ))
+
+          # 기준 월을 결정
+          if [ "$START_MONTH" = "$MONTH" ] && [ "$DAYS_IN_START_MONTH" -gt 3 ]; then
+            TARGET_MONTH="$START_MONTH"
+          else
+            TARGET_MONTH="$END_MONTH"
           fi
-          DIR_NAME="${YEAR}-${MONTH}/Week${WEEK_NUMBER}"
+
+          # 기준 월의 첫째 주부터 몇 주 차인지 계산
+          FIRST_DAY_OF_MONTH="${YEAR}-${TARGET_MONTH}-01"
+          DAYS_SINCE_FIRST=$(($(date -d "$TODAY" +%s) - $(date -d "$FIRST_DAY_OF_MONTH" +%s)))
+          WEEK_NUMBER=$(( (DAYS_SINCE_FIRST / 86400) / 7 + 1 ))
+
+          DIR_NAME="${YEAR}-${TARGET_MONTH}/Week${WEEK_NUMBER}"
           echo "::set-output name=dir_name::${DIR_NAME}"
 
       # Step 4: Prepare files for B repository
@@ -66,7 +87,7 @@ jobs:
       # Step 5: Clone B repo and handle empty repo case
       - name: Clone B repository
         run: |
-          git clone https://${{ secrets.TOKEN }}@github.com/WeGoEver/HeeChan_Algo.git b_repo
+          git clone https://${{ secrets.TOKEN }}@github.com/BetterTomorrowThanToday/test_repo2 b_repo
           cd b_repo
           
           # Check if the repository is empty (no commits)
@@ -79,24 +100,7 @@ jobs:
             git pull origin main
           fi
 
-#      # Step 5: Clone B repo and handle empty repo case
-#      - name: Clone B repository
-#        run: |
-#          git clone https://${{ secrets.TOKEN }}@github.com/WeGoEver/HeeChan_Algo.git b_repo
-#          cd b_repo
-#
-#          # Check if the repository is empty (no commits)
-#          if [ -z "$(git log --oneline)" ]; then
-#            echo "B repository is empty, creating an initial commit"
-#            # Initialize the repository with an initial commit if it's empty
-#            git commit --allow-empty -m "Initial commit"
-#            git push origin main
-#          else
-#            git pull origin main
-#          fi
-
-
-      # Step 6: Copy prepared files to B repository
+      # Step 6: Copy prepared files to B repository (각 파일의 커밋 날짜에 맞는 디렉토리로 복사)
       - name: Copy prepared files to B repository
         run: |
           DIR_NAME=${{ steps.date.outputs.dir_name }}
@@ -110,16 +114,6 @@ jobs:
           # Clean up temp directory
           rm -rf temp_b_repo
 
-#      # Step 7: Commit and push to B repository with A repo's last commit message
-#      - name: Commit and push to B repository with A repo's commit messages
-#        run: |
-#          cd b_repo
-#          git add .
-#          LAST_COMMIT_MSG=${{ env.LAST_COMMIT_MSG }}
-#
-#          # Commit with the last commit message from A repo
-#          git commit -m "Sync Silver and Gold updates from A repository: ${LAST_COMMIT_MSG}"
-#          git push origin main
       # Step 7: Commit and push to B repository with A repo's last commit message
       - name: Commit and push to B repository with A repo's commit messages
         run: |
@@ -136,5 +130,5 @@ jobs:
           fi
           
           # Commit with the last commit message from A repo
-          git commit -m "Sync Silver and Gold updates from A repository: ${LAST_COMMIT_MSG}"
+          git commit -m "${LAST_COMMIT_MSG}"
           git push origin main
