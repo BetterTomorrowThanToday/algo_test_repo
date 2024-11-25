@@ -77,54 +77,62 @@ jobs:
               cp -r "$PROBLEM_DIR"/* "$TARGET_DIR"/
           
               # 커밋 메시지를 JSON 파일에 추가
-              # jq를 사용하여 JSON 파일 업데이트
               jq --arg path "$TARGET_PATH" --arg msg "$COMMIT_MSG" \
                 '. + {($path): $msg}' commit_messages.json > commit_messages.tmp && \
                 mv commit_messages.tmp commit_messages.json
             fi
           done
 
-      - name: Clone B repository
+      - name: Clone and set up B repository
         run: |
-          git clone https://${{ secrets.TOKEN }}@github.com/BetterTomorrowThanToday/test_repo2 b_repo
-          cd b_repo
-          if [ ! -f README.md ]; then
+          # B 레포지토리 클론
+          git clone https://${{ secrets.TOKEN }}@github.com/BetterTomorrowThanToday/test_repo2 b_repo || {
+            # 클론 실패 시 새 레포지토리 초기화
+            mkdir b_repo
+            cd b_repo
+            git init
+            git remote add origin https://${{ secrets.TOKEN }}@github.com/BetterTomorrowThanToday/test_repo2
             echo "# Algorithm Study Archive" > README.md
             git add README.md
             git commit -m "Initial commit"
-            git push origin main
-          fi
-          git pull origin main
+            git branch -M main
+            git push -u origin main
+            cd ..
+          }
 
       - name: Sync files to B repository
         run: |
           if [ -d "temp_b_repo" ]; then
-            # 변경된 파일들을 B 레포지토리로 복사
+            # temp_b_repo의 내용을 B 레포지토리로 복사
             cp -r temp_b_repo/* b_repo/
             cd b_repo
           
-            # 각 변경된 디렉토리에 대해 개별적으로 커밋
+            # 변경된 파일들 커밋
+            git add .
+          
+            # 각 문제 폴더별로 개별 커밋
             while IFS= read -r file; do
               if [[ "$file" == *"Week"* ]]; then
                 dir_path=$(dirname "$file")
-                problem_path="${dir_path#*/}"  # temp_b_repo/ 제거
+                problem_path="${dir_path#*/}"
           
                 # commit_messages.json에서 해당 경로의 커밋 메시지 가져오기
                 commit_msg=$(jq -r --arg path "$problem_path" '.[$path]' ../commit_messages.json)
           
-                if [ "$commit_msg" != "null" ]; then
+                if [ "$commit_msg" != "null" ] && [ -n "$commit_msg" ]; then
+                  echo "Committing changes for: $problem_path"
                   git add "$file"
                   git commit -m "$commit_msg" || true
+                else
+                  echo "Using default commit message for: $problem_path"
+                  git add "$file"
+                  git commit -m "Add: $problem_path" || true
                 fi
               fi
-            done < <(git status --porcelain | cut -c4-)
+            done < <(git status --porcelain | grep -v "^D" | cut -c4-)
           
-            # 변경사항이 있으면 푸시
-            if [ -n "$(git status --porcelain)" ]; then
-              git push origin main
-            else
-              echo "No changes to commit"
-            fi
+            # 변경사항 푸시
+            git push origin main || git push -u origin main
           else
             echo "No files to sync"
           fi
